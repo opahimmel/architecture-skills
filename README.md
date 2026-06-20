@@ -1,138 +1,151 @@
-# Architecture Skills for Claude Code
+# Environment Engineering for AI Agents
 
-> Skills die AI-Agenten ermöglichen eine Codebase **wirklich** zu verstehen —
-> nicht nur Dateien zu lesen, sondern Architektur zu navigieren.
-
----
-
-## Das Problem
-
-Ein AI-Agent der in deine Codebase taucht, sieht Code — aber nicht **Bedeutung**.
-
-Er sieht `handlePointerDown()` — aber nicht dass das der einzige erlaubte Einstieg für Mouse-Events ist.  
-Er sieht `source.write()` — aber nicht dass das ein IPC-Call nach Rust ist, der Batching braucht.  
-Er sieht `CLAUDE.md` — aber nicht was vor drei Wochen falsch lief und warum.
-
-Das Ergebnis: der Agent bricht Invarianten. Er dupliziert Logik. Er stellt Fragen die du schon 10x beantwortet hast. Er braucht dich als Korrektiv statt als Richtungsgeber.
-
-Diese Skills lösen das — durch drei Schichten die sich nicht überlappen:
-
-```
-Schicht 1: CLAUDE.md          → Identität: Was ist das Projekt? Was gilt immer?
-Schicht 2: .xp/db.jsonl       → Erfahrung: Was hat die Arbeit an diesem Repo gelehrt?
-Schicht 3: Semantic Hooks      → Seams: Wo sind die Nahtstellen im Code?
-```
-
-Jede Schicht beantwortet andere Fragen. Zusammen geben sie einem Agenten ein vollständiges Bild — ohne Redundanz, ohne Token-Verschwendung.
+> Context Engineering fragt: Was steht im Kontext-Fenster?  
+> Environment Engineering fragt: In welcher Umgebung operiert der Agent — und was findet er, wenn er sucht?
 
 ---
 
-## Warum das besser ist als alles in CLAUDE.md zu schreiben
+## Das Konzept
 
-Das klassische Muster: alles in CLAUDE.md stopfen. Architektur, Konventionen, Fallstricke, History.
+Ein AI-Agent sucht. Er greped, öffnet Dateien, sammelt Kontext. Das ist seine Grundfunktion —
+kein Harness, kein Framework nötig.
 
-Das Problem damit:
+Die entscheidende Variable ist die **Umgebung** in der er sucht. Ist sie stumm, bricht er
+Invarianten, dupliziert Logik, stellt Fragen die schon beantwortet wurden. Ist sie engineered,
+findet er Bedeutung statt nur Code — und jede Session baut auf der letzten auf.
 
-- **CLAUDE.md wird in jede Session geladen** — jedes Detail kostet Context-Budget
-- **Details veralten schnell** — nach dem Refactoring stimmt die Hälfte nicht mehr
-- **Der Agent findet nicht was er sucht** — 300-Zeilen-CLAUDE.md ist ein Blob, kein Navigationssystem
-
-Die Alternative: Information dort platzieren wo sie entsteht und gebraucht wird.
-
-```
-Architectural boundary in code?     → @boundary: direkt an der Stelle
-Non-obvious lesson from a session?  → .xp/db.jsonl, greppbar nach Topic
-What this project IS?               → CLAUDE.md, kurz und stabil
-```
-
-Der Agent kann gezielt grepen statt blind zu lesen. `grep "@boundary:" src/` zeigt alle Grenzen in einer Zeile.
+Environment Engineering bedeutet: die Umgebung so gestalten dass ein suchender Agent
+automatisch das Richtige findet, ohne dass man es ihm jedes Mal neu erklären muss.
 
 ---
 
-## Die Skills
+## Drei Schichten
 
-### `semantic-hooks` — Code annotieren
+```
+CLAUDE.md          → Kognitive Schicht   — wie der Agent suchen soll
+Semantic Hooks     → Strukturschicht     — wo die Nahtstellen im Code sind
+XP-Datenbank       → Wissensschicht      — was bereits erschlossen wurde
+```
 
-Maschinenlesbare Tags direkt im Code. Der Agent sieht die Architektur dort wo sie passiert.
+Keine Schicht ersetzt die andere. Zusammen entstehen Pfade durch die Codebasis — maschinenlesbar,
+greppbar, persistent über Sessions hinweg.
+
+---
+
+## Warum nicht einfach alles in CLAUDE.md schreiben?
+
+Das klassische Muster: alles in ein Markdown-File. Architektur, Konventionen, Fallstricke,
+was letzte Woche schiefgelaufen ist.
+
+Das Problem: **ein MD-File ist immer vollständig im Kontext.**
+
+Wenn 300 Zeilen in CLAUDE.md stehen, lädt der Agent alle 300 Zeilen — jede Session, jede Aufgabe.
+Er bekommt alles auf einmal. Aber woher soll er wissen was davon jetzt gerade wichtig ist,
+wenn man es nicht explizit markiert hat? Die kritische Information steht vielleicht in der Mitte —
+zwischen Konventionen die er gerade nicht braucht.
+
+**Die XP-Datenbank löst das anders:**
+
+```json
+{"id": "auth:token-flow", "note": "JWT in Redis gecacht, nicht DB. null wirft 500.", ...}
+{"id": "canvas:world-to-screen", "note": "Koordinaten-Transform — nicht anfassen ohne Tests.", ...}
+{"id": "ipc:write-batching", "note": "source.write() ist ein IPC-Call nach Rust. Batching zwingend.", ...}
+```
+
+Der Agent bekommt nur was er sucht. Greped er nach `token`, erscheint `auth:token-flow`.
+Greped er nach `source.write`, erscheint `ipc:write-batching`. Die Datenbank surfaced
+genau dann was relevant ist — demand-driven, nicht bulk-loaded.
+
+Das setzt voraus dass die Slug-Struktur (`domain:konzept`) so gewählt wird dass ein natürlicher
+grep-Treffer den richtigen Eintrag zurückgibt. Das ist das Handwerk hinter dem System.
+
+---
+
+## Die kognitive Schicht: CLAUDE.md als Navigationsprotokoll
+
+Die Datenbank und die Hooks sind inerte Dateien bis der Agent weiß dass er sie benutzen soll.
+Das kommt aus CLAUDE.md — **nicht als Dokumentation, sondern als Verhaltensprotokoll:**
+
+```
+Vor dem ersten File-Lookup:
+  grep -i "<aufgaben-keyword>" .xp/db.jsonl
+  → bereits erschlossenes Wissen, nicht neu herleiten
+
+Bevor du ein Modul suchst:
+  grep -r "@domain:<bereich>" src/
+  → Owner direkt finden, statt Dateinamen zu raten
+
+Bevor du Code einfügst:
+  grep "@boundary\|@invariant" <zieldatei>
+  → Schranken prüfen bevor du anfasst
+```
+
+Diese Instruktionen stehen **im globalen `~/.claude/CLAUDE.md` und im Projekt-CLAUDE.md**.
+Beide. Denn das globale File steuert das generelle Suchverhalten des Agenten —
+das Projekt-File verankert es im konkreten Repo-Kontext.
+
+Ohne diese Prompts: die Infrastruktur existiert, wird aber nie benutzt.
+
+---
+
+## Die Strukturschicht: Semantic Hooks
+
+Maschinenlesbare Architektur-Tags direkt im Code — an den Stellen wo ein Agent
+ohne Hinweis scheitert oder Grenzen bricht:
 
 ```typescript
 /**
  * @domain:      canvas-input
  * @owns:        dom-events,hit-testing
- * @depends:     input-actions,state
  * @invariant:   no-ipc-calls
  */
 
 // @routing:pointer-down pointerDown — Main entry for all mouse interactions
-// @boundary:rust-ipc-write source.write — Batched position updates to DB
-// @extend:shape-types SHAPE_TYPES — Add new shapes here
+// @boundary:rust-ipc-write source.write — Batched IPC call to Rust, requires batching
 // @invariant:world-to-screen-math worldToScreen — Do not touch without tests
 ```
 
-`grep "pointerDown"` liefert die Routing-Zeile automatisch mit — kein separater Lookup nötig.
-
-**Wann:** Neues Modul ohne Kontext. Agent hat eine Grenze gebrochen. Codebase soll agent-ready werden.  
-**Aufruf:** `/semantic-hooks`
+Der Agent greped nach `pointerDown` — er bekommt den Hook in derselben Zeile mit.
+Keine separate Dokumentationssuche. Die Architektur ist dort wo der Code ist.
 
 ---
 
-### `semantic-hooks-review` — Hooks aktuell halten
+## Die Wissensschicht: XP-Datenbank (`.xp/db.jsonl`)
 
-Prüft bestehende Hooks auf Konsistenz, Vollständigkeit, Cross-References und Veralterung. Fixt automatisch fehlende Symbolnamen (Symbol-Mirroring).
+Was jede Session lernt das nicht im Code steht — implizite Verträge, Namens-Diskrepanzen,
+Fallen, semantische Rollen — wird am Ende eingetragen. Der nächste Agent greped zuerst.
 
-**Wann:** Nach Refactoring. Bei Architecture Reviews. Wenn mehrere Personen Hooks geschrieben haben.  
-**Aufruf:** `/semantic-hooks-review`
+Das Erschließen einer Codebasis wird mit jeder Session billiger. Was einmal verstanden wurde
+muss nicht neu hergeleitet werden. Das Projekt akkumuliert XP.
 
 ---
 
-### `xp-setup` — XP-Datenbank anlegen
+## Die Skills: Setup und Pflege der Infrastruktur
 
-Legt `.xp/db.jsonl` an und erweitert CLAUDE.md mit dem Nutzungsabschnitt. Einmalig pro Repo.
+Die Skills in diesem Repo sind nicht das System — sie bauen es auf und halten es aktuell.
 
-```json
-{"id": "auth:token-flow", "note": "JWT wird in Redis gecacht, nicht in der DB. Consumer erwarten immer ein gültiges Token — null wirft einen 500.", "files": ["src/auth/token.ts"], "updated": "2026-06-20"}
+| Skill | Funktion |
+|-------|---------|
+| `/xp-setup` | `.xp/db.jsonl` anlegen + CLAUDE.md erweitern — einmalig pro Repo |
+| `/xp-update` | Session-Wissen einschreiben — am Ende jeder Session |
+| `/semantic-hooks` | Kritische Module annotieren |
+| `/semantic-hooks-review` | Hooks auf Konsistenz und Veralterung prüfen — nach Refactoring |
+| `/improve-claude-file` | CLAUDE.md schärfen wenn sie aufgebläht ist |
+
+---
+
+## Einrichten
+
+### 1. Globales CLAUDE.md erweitern
+
+```bash
+cat CLAUDE_global_template.md >> ~/.claude/CLAUDE.md
 ```
 
-**Wann:** Neues Repo. Erster AI-Agent-Einsatz.  
-**Aufruf:** `/xp-setup`
+[`CLAUDE_global_template.md`](CLAUDE_global_template.md) enthält beide Abschnitte
+(XP-Datenbank + Semantische Hooks) in der exakten Form die der Agent braucht.
 
----
-
-### `xp-update` — Insights nach Session eintragen
-
-Reflektiert die Session, filtert nicht-offensichtliche Insights, schreibt direkt in `.xp/db.jsonl`.
-
-Was hineingehört: **semantische Rollen** (nicht Syntax), **implizite Verträge**, **Fallen** die ein Agent ohne Hinweis wiederholen würde.
-
-Was nicht hineingehört: Implementierungsdetails, Session-Tagebuch, was im Code selbst steht.
-
-**Wann:** Am Ende jeder Session.  
-**Aufruf:** `/xp-update`
-
----
-
-### `improve-claude-file` — CLAUDE.md schärfen
-
-Schreibt CLAUDE.md neu: präzise, kurz, ohne Redundanz zu XP-DB oder Hooks. CLAUDE.md beantwortet nur noch: *Was ist dieses Projekt? Warum existiert es? Was gilt immer?*
-
-**Wann:** CLAUDE.md ist aufgebläht. Nach größerem Refactoring.  
-**Aufruf:** `/improve-claude-file`
-
----
-
-## Empfohlene Reihenfolge
-
-```
-1. /xp-setup              → XP-Datenbank anlegen
-2. /semantic-hooks         → kritische Module annotieren
-3. /improve-claude-file    → CLAUDE.md schärfen
-4. /xp-update              → nach jeder Session
-5. /semantic-hooks-review  → nach jedem Refactoring
-```
-
----
-
-## Installation
+### 2. Skills installieren
 
 ```bash
 cp -r semantic-hooks ~/.claude/skills/
@@ -142,9 +155,15 @@ cp -r xp-system/xp-setup ~/.claude/skills/
 cp -r xp-system/xp-update ~/.claude/skills/
 ```
 
-**XP-System:** Die globale `~/.claude/CLAUDE.md` muss um den XP-Abschnitt erweitert werden —
-ohne ihn wissen Agents nicht dass die Datenbank existiert.
-Details in [`xp-system/README.md`](xp-system/README.md).
+### 3. Im Projekt
+
+```
+/xp-setup            → Datenbank anlegen, Projekt-CLAUDE.md erweitern
+/semantic-hooks      → kritische Module annotieren
+/improve-claude-file → Projekt-CLAUDE.md schärfen
+```
+
+Dann nach jeder Session: `/xp-update` — nach jedem Refactoring: `/semantic-hooks-review`.
 
 ---
 
@@ -152,15 +171,5 @@ Details in [`xp-system/README.md`](xp-system/README.md).
 
 | Datei | Was sie tut |
 |-------|------------|
-| [`MIGRATE_semantic-hooks_symbol-mirroring.md`](MIGRATE_semantic-hooks_symbol-mirroring.md) | Findet alle grep-blinden Inline-Hooks und fügt den Symbolnamen ein |
-| [`MIGRATE_xp_session-log-analyse.md`](MIGRATE_xp_session-log-analyse.md) | Analysiert vergangene Sessions auf Irrwege und Muster → generiert XP-Einträge |
-
-Datei öffnen → Inhalt kopieren → in neuem Gespräch im Ziel-Projekt einfügen.
-
----
-
-## Update Juni 2026
-
-- **semantic-hooks:** Inline-Hooks tragen jetzt den Symbolnamen direkt im Marker (Symbol-Mirroring). `grep "pointerDown"` liefert damit automatisch den Hook.
-- **semantic-hooks-review:** Check 5 prüft Symbol-Mirroring und fixt fehlende Symbolnamen automatisch.
-- **xp-setup / xp-update:** Neues Eintrag-Format: `domain:slug`-IDs, `note` statt `insight`, `files` + `file_hash` für Staleness-Erkennung.
+| [`MIGRATE_semantic-hooks_symbol-mirroring.md`](MIGRATE_semantic-hooks_symbol-mirroring.md) | Findet grep-blinde Inline-Hooks und fügt Symbolnamen ein |
+| [`MIGRATE_xp_session-log-analyse.md`](MIGRATE_xp_session-log-analyse.md) | Analysiert vergangene Sessions → generiert XP-Einträge |
