@@ -35,20 +35,36 @@ Ein Eintrag beantwortet drei Fragen:
 
 | Prüfung | Ergebnis |
 |---------|---------|
-| Bereits in db.jsonl? (`grep "slug" .xp/db.jsonl`) | überspringen oder updaten |
+| Bereits in db.jsonl? (`grep "slug" .xp/db.jsonl`) | Upsert — alte Zeile wird ersetzt |
+| Eintrag veraltet / irrelevant? | Zeile aktiv löschen (Upsert ohne Anhängen) oder weglassen |
 | Note würde nichts über den lesbaren Code hinausgehen? | trotzdem aufnehmen — semantische Rolle + Connections zählen |
 
-### 3. Eintrag schreiben
+### 3. Eintrag schreiben (Upsert)
 
 **Format:**
 ```json
-{"id": "domain:slug", "note": "Semantische Rolle. Connections + warum. Fallen oder implizite Verträge.", "files": ["src/relevant.ts"], "file_hash": "abc123", "updated": "YYYY-MM-DD"}
+{"id": "domain:slug", "keywords": ["natürlichsprachige", "suchbegriffe", "deutsch+englisch"], "note": "Semantische Rolle. Connections + warum. Fallen oder implizite Verträge.", "files": ["src/relevant.ts"], "file_hash": "abc123", "updated": "YYYY-MM-DD"}
 ```
+
+`keywords` — deutschsprachige Begriffe aus der Aufgaben-Beschreibung, nicht Code-Symbole. Ziel: `grep -i "reihenfolge"` trifft den Eintrag `sequencer:resolve-chain`. Mindestens 3, maximal 8 Keywords pro Eintrag.
 
 **File-Hash ermitteln:**
 ```bash
 git hash-object src/relevant.ts
 ```
+
+**Upsert — bestehende ID ersetzen, neue anhängen:**
+```bash
+python3 -c "
+import json, sys
+new = json.loads(sys.argv[1])
+lines = [l for l in open('.xp/db.jsonl') if json.loads(l)['id'] != new['id']]
+lines.append(json.dumps(new, ensure_ascii=False) + '\n')
+open('.xp/db.jsonl', 'w').writelines(lines)
+" '<JSON>'
+```
+
+Kein Append ohne Prüfung. Kein `status: obsolet`. Keine Duplikate.
 
 **Die Note — Dichte über Vollständigkeit:**
 
@@ -59,21 +75,6 @@ Alles in einem bis zwei Sätzen. Drei Aspekte, kein Fülltext.
 ✅ `"Zentrale Canvas-Datenstruktur — in DB als canvas_object gespeichert (Namens-Diskrepanz). ShapeNormalizer muss vor jedem render-Call laufen, sonst crash. Consumer: RenderEngine, ExportService."` — Rolle + Connections + Falle  
 ✅ `"Einziger Einstiegspunkt für alle API-Fehler — Handling woanders wird nicht gefangen. Verbindet sich mit Logger und ResponseBuilder. Namenskonvention: E_USER_ prefix für user-facing errors."` — Semantik + Topologie + Vertrag  
 
-### 4. Marker-Snippet generieren
+### 4. Anzeigen
 
-Nach dem Schreiben: zeige den Marker den der Nutzer direkt vor das Symbol im Code einfügt.
-
-```
-Eintrag: ui:shape
-
-Marker für den Code:
-// @xp:ui:shape — Shape
-```
-
-Format: `// @xp:<id> — <SymbolName>`
-
-Der Symbol-Name im Kommentar sorgt dafür dass der Marker automatisch im grep-Output erscheint wenn der Agent nach dem Symbol sucht — ohne explizite Instruktion.
-
-### 5. Anzeigen
-
-Alle neuen oder geänderten Einträge zeigen. Marker-Snippets pro Eintrag.
+Alle neuen oder geänderten Einträge zeigen.

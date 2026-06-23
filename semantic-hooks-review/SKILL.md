@@ -1,6 +1,6 @@
 ---
 name: semantic-hooks-review
-description: Audits and updates existing semantic hooks (@domain, @owns, @routing, @boundary, @extend, @invariant) for consistency, completeness, cross-references, and staleness. Use when hooks are already in place and need a health check, after a refactor, or when running an architecture review. Builds on the semantic-hooks skill.
+description: Audits existing semantic hooks (@invariant, @boundary, @xp) for consistency, completeness, cross-references, and staleness. Use when hooks are already in place and need a health check, after a refactor, or when running an architecture review. Builds on the semantic-hooks skill.
 ---
 
 # Semantic Hooks Review
@@ -10,49 +10,49 @@ Builds on [semantic-hooks](../semantic-hooks/SKILL.md). Assumes hooks are alread
 ## Quick start
 
 ```bash
-grep -rn "@domain\|@owns\|@depends\|@routing\|@boundary\|@extend\|@invariant\|@side-effects\|@critical-path\|@context" \
+grep -rn "@invariant:\|@boundary:\|@xp:" \
   --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" .
 ```
 
 ## Workflow
 
-1. **Scan** — grep for all hook tags, build file+line inventory
-2. **Analyse** — run the four checks (see [CHECKS.md](CHECKS.md))
-3. **Report** — print structured findings grouped by check
-4. **Fix** — apply edits directly, log every change made
+1. **Scan** — grep für alle aktiven Hook-Tags, File+Zeilen-Inventar aufbauen
+2. **Analyse** — fünf Checks ausführen (siehe [CHECKS.md](CHECKS.md))
+3. **Report** — strukturierte Findings, gruppiert nach Check
+4. **Fix** — Edits direkt anwenden, jede Änderung im Report loggen
 
-## Fix rules
+## Fix-Regeln
 
-| Issue type | Action |
-|------------|--------|
-| kebab-case violations | Auto-fix |
-| Duplicate tags in same header | Auto-fix (keep first) |
-| Inline hook missing symbol name | Auto-fix — insert symbol name from the line below |
-| Missing file-header | Ask — needs role judgment |
-| Orphaned / dangling cross-refs | Ask — may be intentional |
-| Ownership conflict | Ask — architecture decision |
-| Stale domain names | Ask — may be mid-refactor |
-| `@invariant` changes | Always show diff, always ask |
+| Issue | Aktion |
+|-------|--------|
+| Kebab-case-Verletzung in Slug | Auto-fix |
+| `@boundary:` ohne Symbol-Name | Auto-fix — Symbol von Folgezeile |
+| `@xp:` ohne db.jsonl-Eintrag | Ask — Eintrag fehlt oder Slug falsch |
+| `@invariant:` zu abstrakt | Ask — Architekturentscheidung |
+| Veralteter Slug (nicht mehr im Code) | Ask — kann intentional sein |
+| `@invariant:` Änderung jeglicher Art | Immer Diff zeigen, immer fragen |
 
-## Report format
+## Report-Format
 
 ```
-## Semantic Hooks Review — <date>
+## Semantic Hooks Review — <datum>
 
-### 1 Konsistenz     (N issues)
-- src/foo.ts:12  @domain:CamelCase → @domain:camel-case
-- src/input.ts:141  @routing:pointer-down missing symbol name → @routing:pointer-down pointerDown
+### 1 Konsistenz       (N issues)
+- src/input.ts:8  @invariant:NoIpcCalls → @invariant:no-ipc-calls
 
-### 2 Vollständigkeit (N missing)
-- src/bar.ts  no file-header — role: central event dispatcher (>5 switch cases)
+### 2 Vollständigkeit  (N missing)
+- src/ipc.ts:44  direkter IPC-Aufruf ohne @boundary:
 
-### 3 Kreuzreferenzen (N conflicts)
-- src/payments.ts  @owns:billing — no file has @depends:billing
+### 3 Kreuzreferenzen  (N conflicts)
+- src/canvas.ts:3  @xp:canvas-grab-engine — kein Eintrag in db.jsonl
 
-### 4 Veraltete Hooks (N stale)
-- src/auth.ts:8  @owns:legacy-auth — label not found anywhere in codebase
+### 4 Veraltete Hooks  (N stale)
+- src/auth.ts:8  @xp:old-auth-flow — Slug nicht mehr in db.jsonl
+
+### 5 Symbol-Mirroring (N issues)
+- src/api.ts:12  @boundary:fetch-user — kein Symbol-Name
 
 ### Actions taken
-- Fixed N / M issues directly
-- N items need manual review (listed above)
+- Fixed N / M issues direkt
+- N Items brauchen manuelle Prüfung (oben gelistet)
 ```

@@ -1,6 +1,6 @@
 ---
 name: xp-setup
-description: Richtet das XP-System im aktuellen Repo ein — .xp/db.jsonl und Marker-Konvention. Einmalig pro Projekt. Nutze es mit /xp-setup oder wenn ein Repo noch keine .xp/db.jsonl hat.
+description: Richtet das XP-System im aktuellen Repo ein — .xp/db.jsonl. Einmalig pro Projekt. Nutze es mit /xp-setup oder wenn ein Repo noch keine .xp/db.jsonl hat.
 ---
 
 # xp-setup
@@ -35,7 +35,6 @@ Wenn `CLAUDE.md` im Repo-Root existiert, folgenden Abschnitt anhängen. Wenn nic
 Wenn `.xp/db.jsonl` existiert:
 
 - Vor dem ersten File-Lookup: `grep -i "<aufgaben-keyword>" .xp/db.jsonl`
-- Wenn `@xp:domain:slug` im grep-Output erscheint: sofort `grep "domain:slug" .xp/db.jsonl` ausführen
 - Eintrag lesen und als gesichertes Wissen behandeln — nicht neu herleiten
 ```
 
@@ -59,18 +58,3 @@ Ein Eintrag pro Konzept, eine Zeile:
 - `file_hash` — SHA256 der Quelldatei: `git hash-object <file>`
 - `updated` — Datum des Eintrags
 
-## Marker-Konvention
-
-Marker direkt vor dem Symbol, Symbol-Name im Kommentar:
-
-```ts
-// @xp:ui:shape — Shape
-export interface Shape { ... }
-```
-
-```python
-# @xp:auth:token-flow — validate_token
-def validate_token():
-```
-
-**Warum der Symbol-Name im Kommentar:** Wenn der Agent nach `Shape` grepped, erscheint der Marker automatisch in der Zeile davor. Der Agent sieht `@xp:ui:shape` im grep-Output bevor er die Datei öffnet — ohne explizite Instruktion.

@@ -13,10 +13,8 @@ Neues nicht-offensichtliches Wissen erschlossen → `/xp-update` aufrufen.
 
 ## Semantische Hooks
 
-Wenn `@domain:`-Annotationen im Projekt existieren (Guard: `grep -rl "@domain:" . --include="*.ts" --include="*.js" 2>/dev/null | head -1`):
-
-**Bevor du ein Modul suchst**: `grep -r "@domain:<bereich>" src/` — findet den Owner direkt, statt Dateinamen zu raten.
+Wenn `@invariant:`- oder `@boundary:`-Annotationen im Projekt existieren (Guard: `grep -rl "@invariant:\|@boundary:" . --include="*.ts" --include="*.js" 2>/dev/null | head -1`):
 
 **Bevor du Code in eine Datei schreibst**: `grep "@boundary\|@invariant" <zieldatei>` — welche Schranken gelten, bevor du einfügst.
 
-**Um alle Consumer eines Moduls zu finden**: `grep -r "@depends:<modulname>"` — alle Abhängigen auf einen Schlag, ohne Files zu öffnen.
+**Wenn `@xp:slug` im Code auftaucht**: sofort `grep "slug" .xp/db.jsonl` — Wissens-Infusion für dieses Konzept.

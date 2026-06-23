@@ -1,88 +1,71 @@
-# Semantic Hooks — Check Details
+# Semantic Hooks Review — Check Details
 
 ## Check 1: Konsistenz
 
-Tag-Werte müssen kebab-case sein — alles andere ist ein Fehler:
-- `@domain:CamelCase` → flag
-- `@domain:snake_case` → flag
-- `@owns:some module` (Leerzeichen) → flag
-- Prosa in Tag-Werten (Verben, Sätze) → flag
-- Doppelte Tags im selben File-Header → flag (keep first)
+Slugs müssen kebab-case sein:
+- `@invariant:NoIpcCalls` → flag
+- `@boundary:fetch_user` → flag
+- `@xp:canvas:grabEngine` → flag (Doppelpunkt nur als Trennzeichen für domain:slug)
 
-**Grep-Basis:**
 ```bash
-grep -rn "@domain:\|@owns:\|@depends:\|@side-effects:\|@context:" --include="*.ts" .
+grep -rn "@invariant:\|@boundary:\|@xp:" --include="*.ts" --include="*.tsx" .
 ```
 
 ## Check 2: Vollständigkeit
 
-**Fehlendes File-Header** — Heuristik für "architekturkritische" Datei:
-- Mehr als 3 Imports UND wird von mehr als 2 anderen Dateien importiert
-- Enthält eine zentrale Switch/Match-Struktur (>5 Cases)
-- Macht direkte IPC-, fetch- oder DB-Aufrufe
+**Fehlende @boundary-Hooks** — Heuristik:
+- Direkter IPC-Aufruf (`invoke(`, `ipcRenderer.send(`) ohne `@boundary:` darüber
+- `fetch(`, `axios.`, `.query(`, `fs.readFile(` ohne `@boundary:`
 
-**Fehlende Inline-Hooks:**
-- Switch/if-else-Kette >5 Branches ohne `@routing:` → fehlt
-- Fetch/IPC/DB-Aufruf ohne `@boundary:` → fehlt
-- Union Type / Enum der bei jedem neuen Feature erweitert wird ohne `@extend:` → fehlt
-- Kritische Math/Koordinaten-Logik ohne `@invariant:` → fehlt
+**Fehlende @invariant-Hooks:**
+- Datei macht ausschließlich Koordinaten-Mathematik → `@invariant:` fehlt wahrscheinlich
+- Datei ist einziger Schreibpunkt in DB/IPC → Single-write-path prüfen
+
+**Fehlende @xp-Links:**
+- Wenn db.jsonl-Einträge mit `"files": ["src/foo.ts"]` existieren, aber foo.ts kein `@xp:` hat
 
 ## Check 3: Kreuzreferenzen
 
-**Domain-Graph aufbauen:**
-1. Alle `@owns:X` sammeln → Ownership-Map: `{X → [file]}`
-2. Alle `@depends:X` sammeln → Dependency-Map: `{X → [file]}`
+**@xp-Slugs gegen db.jsonl abgleichen:**
+```bash
+# Alle @xp-Slugs im Code
+grep -rn "@xp:" --include="*.ts" --include="*.tsx" --include="*.js" . \
+  | grep -oP "@xp:\K[a-z0-9:_-]+" | sort -u > /tmp/xp_code.txt
 
-**Drei Fehlertypen:**
+# Alle IDs in db.jsonl
+jq -r '.id' .xp/db.jsonl | sort -u > /tmp/xp_db.txt 2>/dev/null \
+  || grep -o '"id":"[^"]*"' .xp/db.jsonl | sed 's/"id":"//;s/"//' | sort -u > /tmp/xp_db.txt
 
-| Problem | Beschreibung |
-|---------|--------------|
-| Orphaned ownership | A `@owns:X`, aber kein File hat `@depends:X` |
-| Dangling dependency | B `@depends:X`, aber kein File hat `@owns:X` |
-| Ownership conflict | A und B beide `@owns:X` |
+# Differenz
+comm -23 /tmp/xp_code.txt /tmp/xp_db.txt
+```
 
-**Hinweis:** Orphaned ownership kann intentional sein (extern konsumiert). Immer fragen.
+Treffer = @xp-Slug im Code, aber kein Eintrag in db.jsonl → fragen.
 
 ## Check 4: Veraltete Hooks
 
-**Vorgehen:**
-1. Alle Domain-Labels aus `@domain:`, `@owns:`, `@depends:` extrahieren
-2. Für jeden Label prüfen: existiert er noch irgendwo als `@domain:X` in der Codebase?
-3. Labels die in `@owns:` / `@depends:` auftauchen aber nirgends als `@domain:X` deklariert sind → potenziell veraltet
-4. Zusätzlich: Prüfe ob referenzierte Dateinamen / Modul-Pfade (z.B. in `@context:`) noch existieren
-
-**Ausnahmen nicht flagen:**
-- `@side-effects:none` → kein Label
-- `@critical-path:true/false` → kein Domain-Label
-
----
-
-## Check 5: Symbol-Mirroring
-
-**Ziel:** Inline hooks müssen den Symbol-Namen im Marker wiederholen, damit `grep "symbolName"` den Hook automatisch mitliefert.
-
-**Altes Format (grep-blind):**
-```typescript
-// @routing:pointer-down — Main entry for all mouse interactions
-function pointerDown(event) { ... }
-```
-
-**Neues Format (grep-sichtbar):**
-```typescript
-// @routing:pointer-down pointerDown — Main entry for all mouse interactions
-function pointerDown(event) { ... }
-```
-
-**Grep für alte Hooks ohne Symbol-Namen:**
+**@xp-Slugs die in db.jsonl stehen aber nicht mehr im Code:**
 ```bash
-grep -rn "@routing:\|@boundary:\|@extend:\|@invariant:" --include="*.ts" --include="*.tsx" . \
-  | grep -v "@[a-z]*:[a-z-]* [a-zA-Z]"
+comm -13 /tmp/xp_code.txt /tmp/xp_db.txt
 ```
 
-Trifft jede Zeile mit einem Inline-Hook-Tag, die nach dem Slug **keinen** Bezeichner (Wort-Zeichen) enthält.
+Treffer → fragen. Kann intentional sein (Eintrag für gelöschtes Konzept als Histor).
 
-**Fix-Regel:** Auto-fix — Symbol-Namen von der Zeile direkt darunter auslesen und nach dem Slug einfügen.
+**@invariant-Slugs:** Prüfen ob das beschriebene Verbot noch sinnvoll ist.
+`@invariant:no-ipc-calls` in einer Datei die IPC-Calls gemacht hat → Widerspruch.
 
+## Check 5: Symbol-Mirroring bei @boundary
+
+Format muss sein: `@boundary:slug symbolName — beschreibung`
+
+```bash
+grep -rn "@boundary:" --include="*.ts" --include="*.tsx" . \
+  | grep -v "@boundary:[a-z-]* [a-zA-Z]"
+```
+
+Trifft alle @boundary-Zeilen ohne Symbolname nach dem Slug.
+
+**Auto-fix:** Symbol-Namen von der Zeile direkt darunter auslesen:
 ```
 // @boundary:rust-ipc-write — Batched updates
 source.write(snapshot)
@@ -91,4 +74,4 @@ source.write(snapshot)
 source.write(snapshot)
 ```
 
-**Ausnahme:** Hooks ohne nachfolgende Symbol-Zeile (z.B. Block-Kommentare über einem ganzen Abschnitt) → Ask, nicht auto-fix.
+**Ausnahme:** Hook über einem Block-Kommentar ohne direkte Symbol-Zeile → Ask.

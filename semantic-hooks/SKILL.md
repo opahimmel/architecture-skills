@@ -1,89 +1,83 @@
 ---
 name: semantic-hooks
-description: Annotate codebases with machine-readable semantic hooks (@domain, @owns, @routing, @boundary, @extend, @invariant) so AI agents navigate architecture correctly without breaking invariants. Use when user mentions context engineering, agent hooks, semantic annotations, AI navigation hints, wants to annotate code for agents, or when a module lacks architectural metadata.
+description: Annotate codebases with minimal machine-readable hooks (@invariant, @boundary, @xp) so AI agents respect architectural constraints and navigate via XP-DB. Use when user mentions agent hooks, semantic annotations, wants to mark write-forbidden areas, or connect code to XP entries.
 ---
 
 # Semantic Hooks
 
-## Quick start
+Drei Hooks — nicht mehr. Alles andere ist Rauschen das nie gegrepped wird.
 
-**File-level header** — top of every architecture-critical module:
+## Die drei Hooks
+
+### `@xp:slug` — XP-Verknüpfung (primäre Navigation)
+
+Verbindet Code-Symbole mit XP-DB-Einträgen. Der einzige Hook der nachweislich wirkt:
+Agent findet `@xp:input-layer-separation` in einer Datei → grepped sofort `input-layer-separation` in db.jsonl.
+
+```typescript
+// @xp:input-layer-separation
+// @invariant:no-ipc-calls
+function handlePointerDown(event: PointerEvent) { ... }
+```
+
+### `@invariant:slug` — Schreibverbot
+
+Nur für echte Schreibverbote. Kein generisches "handle with care".
+
+```typescript
+// @invariant:no-ipc-calls — IPC nur über AppBridge, nie direkt hier
+// @invariant:single-write-path — alle DB-Writes gehen durch source.write()
+```
+
+**Erlaubt:**
+- `@invariant:no-ipc-calls`
+- `@invariant:single-write-path`
+- `@invariant:world-to-screen-math` (Koordinaten-Math nicht anfassen)
+
+**Nicht erlaubt:**
+- `@invariant:single-source-of-truth` — zu abstrakt, kein Schreibverbot
+- `@invariant:keep-clean` — nichts sagend
+
+### `@boundary:slug symbolName` — Systemgrenze
+
+Inline, direkt über dem Aufruf. Symbol-Name wiederholen damit grep die Stelle findet.
+
+```typescript
+// @boundary:rust-ipc-write source.write — Batched position updates to DB
+source.write(shapesSnapshot)
+```
+
+Nur an echten Systemgrenzen: IPC, fetch, DB, Filesystem. Nicht an internen Funktionsaufrufen.
+
+## File-Header
+
+**Kein Header mehr.** @domain, @owns, @depends, @routing, @extend, @side-effects, @context, @critical-path — alle entfernt. Navigation läuft über XP-DB.
+
+Einzige Ausnahme: Wenn eine ganze Datei unter einem Invariant steht, kann `@invariant:` im Header stehen (eine Zeile):
 
 ```typescript
 /**
- * @domain:      canvas-input
- * @owns:        dom-events,hit-testing
- * @depends:     input-actions,state
- * @side-effects:none
- * @invariant:   no-ipc-calls
+ * @invariant:no-ipc-calls  @xp:input-layer-separation
  */
 ```
 
-**Inline hooks** — at the seams of the code, with the symbol name repeated so grep finds the marker:
+## Workflow: Datei annotieren
 
-```typescript
-// @routing:pointer-down pointerDown — Main entry for all mouse interactions
-function pointerDown(event) { ... }
+1. Lies die Datei — existiert ein XP-Eintrag? `grep "domain:slug" .xp/db.jsonl`
+2. Wenn ja: `@xp:slug` an die zentrale Funktion/den zentralen Export
+3. Schreibverbote für die ganze Datei → eine `@invariant:`-Zeile im Header
+4. IPC/fetch/DB-Aufrufe → `@boundary:` direkt über dem Aufruf
+5. Alles andere: weglassen
 
-// @boundary:rust-ipc-write source.write — Batched position updates to DB
-source.write(shapesSnapshot)
-
-// @extend:shape-types SHAPE_TYPES — Add new shapes here
-// @invariant:world-to-screen-math worldToScreen — Do not touch without tests
-```
-
-`grep "pointerDown"` now returns both the hook line and the definition — the marker is never invisible.
-
-## Inline hook tags
-
-| Tag | Place it at | Example |
-|-----|-------------|---------|
-| `@routing:` | Switch statements, central event handlers, message dispatchers | `@routing:keyboard-shortcuts handleKeyDown` |
-| `@boundary:` | IPC calls, filesystem access, DOM mutations from non-UI code | `@boundary:fs-read loadImageCache — Loads images into cache` |
-| `@extend:` | Union types, arrays, interfaces touched on every new feature of a type | `@extend:color-presets COLOR_PRESETS` |
-| `@invariant:` | Math, hit-testing, Z-index logic that silently breaks if "optimized" | `@invariant:snap-math snapToGrid — Do not simplify` |
-
-## File-level header tags
-
-| Tag | Format | Purpose |
-|-----|--------|---------|
-| `@domain:` | kebab-case | Semantic domain this module owns |
-| `@owns:` | comma-separated | Subsystems this module controls |
-| `@depends:` | comma-separated | Direct imports that matter architecturally |
-| `@side-effects:` | comma-separated or `none` | External state this module touches |
-| `@critical-path:` | `true` / `false` | Load-bearing module — extra caution |
-| `@invariant:` | kebab-case | Global rule for the entire file |
-| `@context:` | kebab-case | Execution context (e.g. `state-mutation-transactions`) |
-
-## Navigation (reading hooks)
-
-Three grep patterns replace file guessing:
+## Vor dem Schreiben in eine Datei
 
 ```bash
-# Find the module that owns a domain area
-grep -r "@domain:canvas-input" src/
-
-# Check invariants before writing into a file
-grep "@boundary\|@invariant" src/input/pointer-handler.ts
-
-# Find all consumers of a module
-grep -r "@depends:grab-module" src/
+grep "@boundary\|@invariant" <zieldatei>
 ```
 
-The trigger: when searching for a file, reach for `@domain:` first. When about to modify a module, grep its `@boundary` and `@invariant` before touching anything.
+Zeigt alle aktiven Schranken. Treffer lesen — dann entscheiden.
 
-## Workflow: hooking a new module
+## Regel
 
-1. Read the module — identify its architectural role
-2. Write the file-level header (domain, owns, depends, side-effects, invariants)
-3. Scan for seams: entry points, system boundaries, extension points, fragile logic
-4. Place one inline hook per seam — no prose, keywords only
-5. Skip anything self-evident from naming alone
-
-## Rules
-
-- **Symbol-mirroring** — inline hooks must repeat the symbol name: `@tag:slug symbolName — description`
-- **No prose** — stichwortartig, keine Sätze
-- **Sparse** — only at seams an agent would misread without the hint
-- **Consistent prefixes** — never invent new ones without updating the guide
-- **No duplicates** — one hook per seam; if two tags fit, two separate lines
+Symbol-Mirroring bei @boundary: Tag-Slug + Symbolname + Beschreibung.
+`@boundary:slug symbolName — warum`
