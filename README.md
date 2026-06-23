@@ -71,9 +71,9 @@ Vor dem ersten File-Lookup:
   grep -i "<aufgaben-keyword>" .xp/db.jsonl
   → bereits erschlossenes Wissen, nicht neu herleiten
 
-Bevor du ein Modul suchst:
-  grep -r "@domain:<bereich>" src/
-  → Owner direkt finden, statt Dateinamen zu raten
+Wenn @xp:slug im Code auftaucht:
+  grep "slug" .xp/db.jsonl
+  → Wissens-Infusion für dieses Konzept
 
 Bevor du Code einfügst:
   grep "@boundary\|@invariant" <zieldatei>
@@ -95,18 +95,18 @@ ohne Hinweis scheitert oder Grenzen bricht:
 
 ```typescript
 /**
- * @domain:      canvas-input
- * @owns:        dom-events,hit-testing
- * @invariant:   no-ipc-calls
+ * @invariant:no-ipc-calls  @xp:input-layer-separation
  */
 
-// @routing:pointer-down pointerDown — Main entry for all mouse interactions
 // @boundary:rust-ipc-write source.write — Batched IPC call to Rust, requires batching
-// @invariant:world-to-screen-math worldToScreen — Do not touch without tests
+source.write(shapesSnapshot)
 ```
 
-Der Agent greped nach `pointerDown` — er bekommt den Hook in derselben Zeile mit.
-Keine separate Dokumentationssuche. Die Architektur ist dort wo der Code ist.
+Drei Hooks — nicht mehr. `@invariant` setzt ein Schreibverbot. `@boundary` markiert echte
+Systemgrenzen (IPC, fetch, DB). `@xp` verbindet das Symbol mit dem XP-DB-Eintrag.
+
+Der Agent greped nach `source.write` — er bekommt `@boundary` in derselben Zeile.
+Greped er nach `input-layer-separation` — er findet `@xp` und schlägt sofort in db.jsonl nach.
 
 ---
 
@@ -127,8 +127,9 @@ Die Skills in diesem Repo sind nicht das System — sie bauen es auf und halten 
 | Skill | Funktion |
 |-------|---------|
 | `/xp-setup` | `.xp/db.jsonl` anlegen + CLAUDE.md erweitern — einmalig pro Repo |
+| `/xp-scan` | Codebasis autonom durchscannen + alle bedeutsamen Symbole eintragen — einmalig für bestehende Repos |
 | `/xp-update` | Session-Wissen einschreiben — am Ende jeder Session |
-| `/semantic-hooks` | Kritische Module annotieren |
+| `/semantic-hooks` | Kritische Module mit `@invariant`, `@boundary`, `@xp` annotieren |
 | `/semantic-hooks-review` | Hooks auf Konsistenz und Veralterung prüfen — nach Refactoring |
 | `/improve-claude-file` | CLAUDE.md schärfen wenn sie aufgebläht ist |
 
@@ -153,6 +154,7 @@ cp -r semantic-hooks-review ~/.claude/skills/
 cp -r improve-claude-file ~/.claude/skills/
 cp -r xp-system/xp-setup ~/.claude/skills/
 cp -r xp-system/xp-update ~/.claude/skills/
+cp -r xp-system/xp-scan ~/.claude/skills/
 ```
 
 ### 3. Im Projekt
